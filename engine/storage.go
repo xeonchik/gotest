@@ -15,6 +15,10 @@ type DataRecord struct {
 	Active  bool
 }
 
+func FlushIndexToDisk(index PKIndex, name string) {
+
+}
+
 var reader *bufio.Reader = nil
 
 func ReadFromStorage() (*DataRecord, error) {

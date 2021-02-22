@@ -10,9 +10,17 @@ import (
 
 const PageSize = 65536
 
+// Страница содержащая записи DataEntity
 type Page struct {
 	Number int
 	Buffer bytes.Buffer
+}
+
+// Представление об одной записе на странице, хранит payload
+type DataEntity struct {
+	Page   int
+	Offset int
+	Size   int
 }
 
 func (p *Page) Free() int {

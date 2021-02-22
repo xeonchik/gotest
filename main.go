@@ -3,7 +3,6 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/tidwall/btree"
 	"godoc/engine"
 	"io/ioutil"
 	"log"
@@ -13,48 +12,36 @@ import (
 	"time"
 )
 
-type Item struct {
-	Key    int
-	Value  string
-	Value2 int
-}
-
-type MultiItem struct {
-	Value2 int
-	Keys   []int
-}
-
-func byKeys(a, b interface{}) bool {
-	i1, i2 := a.(*Item), b.(*Item)
-	return i1.Key < i2.Key
-}
-
-func byValue2(a, b interface{}) bool {
-	i1, i2 := a.(*MultiItem), b.(*MultiItem)
-	return i1.Value2 < i2.Value2
-}
-
-var primary = btree.New(byKeys)
-var valuesIdx = btree.New(byValue2)
-
 func main() {
 	fmt.Println("Hello, World")
 
 	engine.OpenBook()
 
-	for i := 0; i < 100; i++ {
+	for i := 0; i < 10; i++ {
+		//writeBook(i)
 		readBook(i)
 	}
 
 	//pkIdx.Print()
 
 	fmt.Println(pkIdx.Get(200))
+	multiItem := multiIdx.Get(412)
+
+	fmt.Println("Items in multi: ", multiIdx.GetTree().Len())
+
+	multiItem.Keys.Tree.Ascend(nil, func(item interface{}) bool {
+		it := item.(*engine.FlatItem)
+		fmt.Println("PK: ", it.Value)
+		return true
+	})
 
 	engine.Close()
 	//readBook(0)
 }
 
 var pkIdx = engine.CreatePKIndex("123")
+var multiIdx = engine.CreateMulti()
+var idxMultiCities = engine.CreateMulti()
 
 func readBook(num int) {
 	page := engine.ReadPage(num)
@@ -70,7 +57,16 @@ func readBook(num int) {
 		}
 
 		pkIdx.Add(_rec, _rec.Primary)
+		val, _ := strconv.Atoi(_rec.Data)
+
+		multiIdx.Add(val, _rec.Primary)
+
+		idxMultiCities.AddArray(_rec.Cities, _rec.Primary)
+
+		fmt.Println(_rec)
 	}
+
+	//engine.FlushIndexToDisk(pkIdx, "primary.idx")
 }
 
 var writePrimary = 1
@@ -136,63 +132,4 @@ func pushHandler(rw http.ResponseWriter, req *http.Request) {
 
 func listHandler(rw http.ResponseWriter, req *http.Request) {
 
-}
-
-func IndexTest() {
-	for i := 1; i <= 1000; i++ {
-		rnd := rand.Intn(1000-10) + 10
-		item := &Item{
-			Key:    i,
-			Value:  fmt.Sprintf("test%d", rnd),
-			Value2: rnd,
-		}
-		primary.Set(item)
-
-		val2 := rnd
-		valItem := valuesIdx.Get(&MultiItem{
-			Value2: val2,
-		})
-
-		var keys []int
-
-		if valItem != nil {
-			multi := valItem.(*MultiItem)
-			keys = append(multi.Keys, i)
-			multi.Keys = keys
-			valuesIdx.Set(multi)
-		} else {
-			keys = append(keys, i)
-			item := &MultiItem{
-				Value2: val2,
-				Keys:   keys,
-			}
-			valuesIdx.Set(item)
-		}
-	}
-
-	primary.Descend(&Item{
-		Key: 10,
-	}, func(item interface{}) bool {
-		it := item.(*Item)
-		fmt.Printf("%d %s\n", it.Key, it.Value)
-		return true
-	})
-
-	fmt.Println("Length: ", primary.Len())
-	fmt.Println("Length Value2 idx: ", valuesIdx.Len())
-
-	rnd := rand.Intn(1000-10) + 10
-	item := primary.Get(&Item{Key: rnd})
-	if item != nil {
-		it := item.(*Item)
-		fmt.Println(it.Value)
-	}
-
-	valItem := valuesIdx.Get(&MultiItem{
-		Value2: 11,
-	})
-	if valItem != nil {
-		it := valItem.(*MultiItem)
-		fmt.Println(it.Keys)
-	}
 }
