@@ -89,11 +89,12 @@ func (idx *MultiIndex) Print() {
 	})
 }
 
-func (idx *PKIndex) Get(key int) *DataRecord {
+func (idx *PKIndex) Get(key int) *PKItem {
 	StatsObj.Hits += 1
-	return idx.Tree.Get(&PKItem{
+	item := idx.Tree.Get(&PKItem{
 		PrimaryKey: key,
-	}).(*PKItem).Record
+	}).(*PKItem)
+	return item
 }
 
 func (idx *MultiIndex) Get(key int) *MultiItem {

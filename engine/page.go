@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/gob"
 	"fmt"
@@ -40,6 +41,27 @@ func (p *Page) PlaceRecord(record DataRecord) int {
 	offset := p.Buffer.Len()
 	p.Buffer.Write(buffer.Bytes())
 	return offset
+}
+
+func ReadRecordByLocator(locator DataRowLocator) *DataRecord {
+
+	offset := int64(locator.Page*PageSize) + locator.Offset
+	_, err := pageFile.Seek(offset, io.SeekStart)
+
+	if err != nil {
+		panic(err)
+	}
+
+	reader = bufio.NewReader(pageFile)
+	decoder := gob.NewDecoder(reader)
+	rec := &DataRecord{}
+
+	err = decoder.Decode(&rec)
+	//if err == io.EOF {
+	//	return nil
+	//}
+
+	return rec
 }
 
 func (p *Page) ReadDataRecord(offset int64) (*DataRecord, *DataRowLocator) {

@@ -15,8 +15,6 @@ import (
 func main() {
 	fmt.Println("Hello, World")
 
-	start := time.Now().UnixNano()
-
 	engine.OpenBook()
 
 	for i := 0; i < 100; i++ {
@@ -24,13 +22,40 @@ func main() {
 		//readBook(i)
 	}
 
-	engine.Close()
-
 	//engine.FlushIndexToDisk(pkIdx, "primary.idx")
-	//idx, err := engine.ReadIndexFromDisk("primary.idx")
+	idx, err := engine.ReadIndexFromDisk("primary.idx")
+
+	if err != nil {
+		panic(err)
+	}
+
+	//idx.Print()
+
+	fmt.Println(idx.Get(4021).Locator)
+	fmt.Println(idx.Get(40021).Locator)
+
+	start := time.Now().UnixNano()
+
+	acc := make([]int, 100000)
+
+	idx.Tree.Ascend(nil, func(item interface{}) bool {
+		it := item.(*engine.PKItem)
+		acc = append(acc, it.PrimaryKey)
+
+		////record := engine.ReadRecordByLocator(it.Locator)
+		//
+		//if record == nil {
+		//	return true
+		//}
+
+		//fmt.Println(record.Primary)
+		return true
+	})
 
 	timer := (time.Now().UnixNano() - start) / 1000
-	fmt.Printf("Result time: %d ms", timer)
+	fmt.Printf("Result time: %d mcs", timer)
+
+	engine.Close()
 }
 
 var pkIdx = engine.CreatePKIndex()
@@ -58,7 +83,7 @@ func readBook(num int) {
 		multiIdx.Add(val, _rec.Primary)
 		idxMultiCities.AddArray(_rec.Cities, _rec.Primary)
 
-		fmt.Println(_rec)
+		//fmt.Println(_rec)
 	}
 }
 
