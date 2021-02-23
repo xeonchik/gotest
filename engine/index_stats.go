@@ -4,9 +4,9 @@ type indexStats struct {
 	Hits int
 }
 
-func InitStats() *indexStats {
+func initStats() *indexStats {
 	obj := &indexStats{Hits: 0}
 	return obj
 }
 
-var StatsObj = InitStats()
+var StatsObj = initStats()

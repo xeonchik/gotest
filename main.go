@@ -37,7 +37,9 @@ func main() {
 
 	engine.Close()
 
-	engine.FlushIndexToDisk(pkIdx, "primary.idx")
+	//engine.FlushIndexToDisk(pkIdx, "primary.idx")
+
+	engine.ReadIndexFromDisk("primary.idx")
 
 	//readBook(0)
 }

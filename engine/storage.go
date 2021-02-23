@@ -3,6 +3,7 @@ package engine
 import (
 	"bufio"
 	"encoding/gob"
+	"fmt"
 	"github.com/golang/protobuf/proto"
 	pb "godoc/proto/dist/proto"
 	"io/ioutil"
@@ -18,6 +19,21 @@ type DataRecord struct {
 	Active  bool
 
 	location *DataRowLocator
+}
+
+func ReadIndexFromDisk(name string) {
+	in, err := ioutil.ReadFile(name)
+	if err != nil {
+		panic(err)
+	}
+
+	indexStore := &pb.PKIndexStore{}
+	err = proto.Unmarshal(in, indexStore)
+	if err != nil {
+		panic(err)
+	}
+
+	fmt.Println(indexStore)
 }
 
 func FlushIndexToDisk(index *PKIndex, name string) {

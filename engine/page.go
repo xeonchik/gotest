@@ -21,6 +21,7 @@ type DataRowLocator struct {
 	Page   int
 	Offset int64
 	Size   int
+	Loaded bool
 }
 
 func (p *Page) Free() int {
@@ -68,6 +69,7 @@ func (p *Page) ReadDataRecord(offset int64) (*DataRecord, *DataRowLocator) {
 		Page:   p.Number,
 		Offset: pos,
 		Size:   0,
+		Loaded: true,
 	}
 	rec.location = locator
 
