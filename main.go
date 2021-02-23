@@ -3,7 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"godoc/engine"
+	"gotest/engine"
 	"io/ioutil"
 	"log"
 	"math/rand"
@@ -15,36 +15,25 @@ import (
 func main() {
 	fmt.Println("Hello, World")
 
+	start := time.Now().UnixNano()
+
 	engine.OpenBook()
 
-	for i := 0; i < 10; i++ {
+	for i := 0; i < 100; i++ {
 		//writeBook(i)
-		readBook(i)
+		//readBook(i)
 	}
-
-	//pkIdx.Print()
-
-	fmt.Println(pkIdx.Get(200))
-	multiItem := multiIdx.Get(412)
-
-	fmt.Println("Items in multi: ", multiIdx.GetTree().Len())
-
-	multiItem.Keys.Tree.Ascend(nil, func(item interface{}) bool {
-		it := item.(*engine.FlatItem)
-		fmt.Println("PK: ", it.Value)
-		return true
-	})
 
 	engine.Close()
 
 	//engine.FlushIndexToDisk(pkIdx, "primary.idx")
+	//idx, err := engine.ReadIndexFromDisk("primary.idx")
 
-	engine.ReadIndexFromDisk("primary.idx")
-
-	//readBook(0)
+	timer := (time.Now().UnixNano() - start) / 1000
+	fmt.Printf("Result time: %d ms", timer)
 }
 
-var pkIdx = engine.CreatePKIndex("123")
+var pkIdx = engine.CreatePKIndex()
 var multiIdx = engine.CreateMulti()
 var idxMultiCities = engine.CreateMulti()
 

@@ -61,17 +61,18 @@ func (p *Page) ReadDataRecord(offset int64) (*DataRecord, *DataRowLocator) {
 	}
 
 	if err != nil {
-		panic(err)
+		return nil, nil
 	}
 
 	pos, _ := rd.Seek(0, io.SeekCurrent)
+	size := pos - offset
+
 	locator := &DataRowLocator{
 		Page:   p.Number,
 		Offset: pos,
-		Size:   0,
+		Size:   int(size),
 		Loaded: true,
 	}
-	rec.location = locator
 
 	return rec, locator
 }

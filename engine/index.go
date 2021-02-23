@@ -19,7 +19,7 @@ func byFlatVal(a, b interface{}) bool {
 }
 
 type MultiIndex struct {
-	tree *btree.BTree
+	Tree *btree.BTree
 }
 
 type MultiItem struct {
@@ -33,8 +33,7 @@ func byIdxVal(a, b interface{}) bool {
 }
 
 type PKIndex struct {
-	tree *btree.BTree
-	name string
+	Tree *btree.BTree
 }
 
 type PKItem struct {
@@ -52,7 +51,7 @@ func byKey(a, b interface{}) bool {
 /// PrimaryKey - PK Link
 func (idx *MultiIndex) Add(indexValue int, key int) {
 	// check that exists
-	item := idx.tree.Get(&MultiItem{
+	item := idx.Tree.Get(&MultiItem{
 		IdxValue: indexValue,
 	})
 
@@ -62,7 +61,7 @@ func (idx *MultiIndex) Add(indexValue int, key int) {
 			IdxValue: indexValue,
 		}
 		item.Keys.Tree.Set(&FlatItem{Value: key})
-		idx.tree.Set(item)
+		idx.Tree.Set(item)
 	} else {
 		it := item.(*MultiItem)
 		flatItem := &FlatItem{Value: key}
@@ -71,7 +70,7 @@ func (idx *MultiIndex) Add(indexValue int, key int) {
 }
 
 func (idx *MultiIndex) GetTree() *btree.BTree {
-	return idx.tree
+	return idx.Tree
 }
 
 func (idx *MultiIndex) Print() {
@@ -79,7 +78,7 @@ func (idx *MultiIndex) Print() {
 		IdxValue: 0,
 	}
 
-	idx.tree.Ascend(point, func(item interface{}) bool {
+	idx.Tree.Ascend(point, func(item interface{}) bool {
 		it := item.(*MultiItem)
 		fmt.Println("Value: ", it.IdxValue)
 		it.Keys.Tree.Ascend(nil, func(item2 interface{}) bool {
@@ -92,16 +91,25 @@ func (idx *MultiIndex) Print() {
 
 func (idx *PKIndex) Get(key int) *DataRecord {
 	StatsObj.Hits += 1
-	return idx.tree.Get(&PKItem{
+	return idx.Tree.Get(&PKItem{
 		PrimaryKey: key,
 	}).(*PKItem).Record
 }
 
 func (idx *MultiIndex) Get(key int) *MultiItem {
 	StatsObj.Hits += 1
-	return idx.tree.Get(&MultiItem{
+	return idx.Tree.Get(&MultiItem{
 		IdxValue: key,
 	}).(*MultiItem)
+}
+
+func (idx *PKIndex) Load(record *DataRecord, locator DataRowLocator, key int) {
+	item := PKItem{
+		Record:     record,
+		PrimaryKey: key,
+		Locator:    locator,
+	}
+	idx.Tree.Load(&item)
 }
 
 func (idx *PKIndex) Add(record *DataRecord, locator DataRowLocator, key int) {
@@ -111,11 +119,11 @@ func (idx *PKIndex) Add(record *DataRecord, locator DataRowLocator, key int) {
 		Locator:    locator,
 	}
 
-	if idx.tree.Get(&item) != nil {
+	if idx.Tree.Get(&item) != nil {
 		panic("PK already exists")
 	}
 
-	idx.tree.Set(&item)
+	idx.Tree.Set(&item)
 }
 
 func (idx *PKIndex) Print() {
@@ -123,24 +131,23 @@ func (idx *PKIndex) Print() {
 		PrimaryKey: 0,
 	}
 
-	idx.tree.Ascend(point, func(item interface{}) bool {
+	idx.Tree.Ascend(point, func(item interface{}) bool {
 		it := item.(*PKItem)
 		fmt.Println(it.Record.Primary)
 		return true
 	})
 }
 
-func CreatePKIndex(name string) *PKIndex {
+func CreatePKIndex() *PKIndex {
 	idx := &PKIndex{
-		tree: btree.New(byKey),
-		name: name,
+		Tree: btree.New(byKey),
 	}
 	return idx
 }
 
 func CreateMulti() *MultiIndex {
 	return &MultiIndex{
-		tree: btree.New(byIdxVal),
+		Tree: btree.New(byIdxVal),
 	}
 }
 
