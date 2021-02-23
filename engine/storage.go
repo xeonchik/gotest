@@ -3,6 +3,9 @@ package engine
 import (
 	"bufio"
 	"encoding/gob"
+	"github.com/golang/protobuf/proto"
+	pb "godoc/proto/dist/proto"
+	"io/ioutil"
 	"log"
 	"os"
 )
@@ -13,10 +16,36 @@ type DataRecord struct {
 	Sectors []int
 	Cities  []int
 	Active  bool
+
+	location *DataRowLocator
 }
 
-func FlushIndexToDisk(index PKIndex, name string) {
+func FlushIndexToDisk(index *PKIndex, name string) {
+	indexStore := &pb.PKIndexStore{}
 
+	index.tree.Ascend(nil, func(it interface{}) bool {
+		item := it.(*PKItem)
+
+		indexItem := &pb.PKIndexItem{
+			Primary:    int32(item.PrimaryKey),
+			PageNumber: int32(item.Locator.Page),
+			Offset:     item.Locator.Offset,
+		}
+		indexStore.Items = append(indexStore.Items, indexItem)
+		return true
+	})
+
+	out, err := proto.Marshal(indexStore)
+
+	if err != nil {
+		panic(err)
+	}
+
+	err = ioutil.WriteFile(name, out, 0660)
+
+	if err != nil {
+		panic(err)
+	}
 }
 
 var reader *bufio.Reader = nil

@@ -38,17 +38,18 @@ type PKIndex struct {
 }
 
 type PKItem struct {
-	value *DataRecord
-	key   int
+	Record     *DataRecord
+	Locator    DataRowLocator
+	PrimaryKey int
 }
 
 func byKey(a, b interface{}) bool {
 	i1, i2 := a.(*PKItem), b.(*PKItem)
-	return i1.key < i2.key
+	return i1.PrimaryKey < i2.PrimaryKey
 }
 
-/// indexValue - value
-/// key - PK Link
+/// indexValue - Record
+/// PrimaryKey - PK Link
 func (idx *MultiIndex) Add(indexValue int, key int) {
 	// check that exists
 	item := idx.tree.Get(&MultiItem{
@@ -92,8 +93,8 @@ func (idx *MultiIndex) Print() {
 func (idx *PKIndex) Get(key int) *DataRecord {
 	StatsObj.Hits += 1
 	return idx.tree.Get(&PKItem{
-		key: key,
-	}).(*PKItem).value
+		PrimaryKey: key,
+	}).(*PKItem).Record
 }
 
 func (idx *MultiIndex) Get(key int) *MultiItem {
@@ -103,10 +104,11 @@ func (idx *MultiIndex) Get(key int) *MultiItem {
 	}).(*MultiItem)
 }
 
-func (idx *PKIndex) Add(record *DataRecord, key int) {
+func (idx *PKIndex) Add(record *DataRecord, locator DataRowLocator, key int) {
 	item := PKItem{
-		value: record,
-		key:   key,
+		Record:     record,
+		PrimaryKey: key,
+		Locator:    locator,
 	}
 
 	if idx.tree.Get(&item) != nil {
@@ -118,12 +120,12 @@ func (idx *PKIndex) Add(record *DataRecord, key int) {
 
 func (idx *PKIndex) Print() {
 	point := &PKItem{
-		key: 0,
+		PrimaryKey: 0,
 	}
 
 	idx.tree.Ascend(point, func(item interface{}) bool {
 		it := item.(*PKItem)
-		fmt.Println(it.value.Primary)
+		fmt.Println(it.Record.Primary)
 		return true
 	})
 }

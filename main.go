@@ -36,6 +36,9 @@ func main() {
 	})
 
 	engine.Close()
+
+	engine.FlushIndexToDisk(pkIdx, "primary.idx")
+
 	//readBook(0)
 }
 
@@ -49,24 +52,23 @@ func readBook(num int) {
 	var pos int64 = 0
 
 	for i := 0; i < 10000; i++ {
-		_rec, _pos := page.ReadDataRecord(pos)
-		pos = _pos
+		_rec, locator := page.ReadDataRecord(pos)
 
 		if _rec == nil {
 			break
 		}
 
-		pkIdx.Add(_rec, _rec.Primary)
+		pos = locator.Offset
+
+		// build indexes
+		pkIdx.Add(_rec, *locator, _rec.Primary)
 		val, _ := strconv.Atoi(_rec.Data)
 
 		multiIdx.Add(val, _rec.Primary)
-
 		idxMultiCities.AddArray(_rec.Cities, _rec.Primary)
 
 		fmt.Println(_rec)
 	}
-
-	//engine.FlushIndexToDisk(pkIdx, "primary.idx")
 }
 
 var writePrimary = 1

@@ -10,16 +10,16 @@ import (
 
 const PageSize = 65536
 
-// Страница содержащая записи DataEntity
+// Страница содержащая записи DataRowLocator
 type Page struct {
 	Number int
 	Buffer bytes.Buffer
 }
 
 // Представление об одной записе на странице, хранит payload
-type DataEntity struct {
+type DataRowLocator struct {
 	Page   int
-	Offset int
+	Offset int64
 	Size   int
 }
 
@@ -41,7 +41,7 @@ func (p *Page) PlaceRecord(record DataRecord) int {
 	return offset
 }
 
-func (p *Page) ReadDataRecord(offset int64) (*DataRecord, int64) {
+func (p *Page) ReadDataRecord(offset int64) (*DataRecord, *DataRowLocator) {
 	rd := bytes.NewReader(p.Buffer.Bytes())
 	_, err := rd.Seek(int64(offset), io.SeekStart)
 
@@ -51,12 +51,12 @@ func (p *Page) ReadDataRecord(offset int64) (*DataRecord, int64) {
 
 	decoder := gob.NewDecoder(rd)
 
-	var rec DataRecord
+	rec := &DataRecord{}
+
 	err = decoder.Decode(&rec)
 
 	if err == io.EOF {
-		pos, _ := rd.Seek(0, io.SeekCurrent)
-		return nil, pos
+		return nil, nil
 	}
 
 	if err != nil {
@@ -64,8 +64,14 @@ func (p *Page) ReadDataRecord(offset int64) (*DataRecord, int64) {
 	}
 
 	pos, _ := rd.Seek(0, io.SeekCurrent)
+	locator := &DataRowLocator{
+		Page:   p.Number,
+		Offset: pos,
+		Size:   0,
+	}
+	rec.location = locator
 
-	return &rec, pos
+	return rec, locator
 }
 
 var pageFile *os.File = nil
