@@ -10,7 +10,7 @@ type FlatIndex struct {
 }
 
 type FlatItem struct {
-	Value int
+	Value uint64
 }
 
 func byFlatVal(a, b interface{}) bool {
@@ -39,7 +39,7 @@ type PKIndex struct {
 type PKItem struct {
 	Record     *DataRecord
 	Locator    DataRowLocator
-	PrimaryKey int
+	PrimaryKey uint64
 }
 
 func byKey(a, b interface{}) bool {
@@ -49,7 +49,7 @@ func byKey(a, b interface{}) bool {
 
 /// indexValue - Record
 /// PrimaryKey - PK Link
-func (idx *MultiIndex) Add(indexValue int, key int) {
+func (idx *MultiIndex) Add(indexValue int, key uint64) {
 	// check that exists
 	item := idx.Tree.Get(&MultiItem{
 		IdxValue: indexValue,
@@ -89,7 +89,7 @@ func (idx *MultiIndex) Print() {
 	})
 }
 
-func (idx *PKIndex) Get(key int) *PKItem {
+func (idx *PKIndex) Get(key uint64) *PKItem {
 	StatsObj.Hits += 1
 	item := idx.Tree.Get(&PKItem{
 		PrimaryKey: key,
@@ -104,7 +104,7 @@ func (idx *MultiIndex) Get(key int) *MultiItem {
 	}).(*MultiItem)
 }
 
-func (idx *PKIndex) Load(record *DataRecord, locator DataRowLocator, key int) {
+func (idx *PKIndex) Load(record *DataRecord, locator DataRowLocator, key uint64) {
 	item := PKItem{
 		Record:     record,
 		PrimaryKey: key,
@@ -113,7 +113,7 @@ func (idx *PKIndex) Load(record *DataRecord, locator DataRowLocator, key int) {
 	idx.Tree.Load(&item)
 }
 
-func (idx *PKIndex) Add(record *DataRecord, locator DataRowLocator, key int) {
+func (idx *PKIndex) Add(record *DataRecord, locator DataRowLocator, key uint64) {
 	item := PKItem{
 		Record:     record,
 		PrimaryKey: key,
@@ -134,7 +134,7 @@ func (idx *PKIndex) Print() {
 
 	idx.Tree.Ascend(point, func(item interface{}) bool {
 		it := item.(*PKItem)
-		fmt.Println(it.Record.Primary)
+		fmt.Println(it.Record.ID)
 		return true
 	})
 }
@@ -152,7 +152,7 @@ func CreateMulti() *MultiIndex {
 	}
 }
 
-func (idx *MultiIndex) AddArray(arr []int, key int) {
+func (idx *MultiIndex) AddArray(arr []int, key uint64) {
 	for _, element := range arr {
 		idx.Add(element, key)
 	}

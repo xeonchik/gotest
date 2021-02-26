@@ -3,7 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"gotest/engine"
+	"godoc/engine"
 	"io/ioutil"
 	"log"
 	"math/rand"
@@ -29,38 +29,35 @@ func main() {
 		panic(err)
 	}
 
-	//idx.Print()
-
-	fmt.Println(idx.Get(4021).Locator)
-	fmt.Println(idx.Get(40021).Locator)
-
 	start := time.Now().UnixNano()
 
-	acc := make([]int, 100000)
-
-	idx.Tree.Ascend(nil, func(item interface{}) bool {
+	idx.Tree.Ascend(&engine.PKItem{
+		PrimaryKey: 1,
+	}, func(item interface{}) bool {
 		it := item.(*engine.PKItem)
-		acc = append(acc, it.PrimaryKey)
 
-		////record := engine.ReadRecordByLocator(it.Locator)
-		//
-		//if record == nil {
-		//	return true
-		//}
+		it.Record = engine.ReadRecordByLocator(&it.Locator)
+		it.Locator.Loaded = true
 
-		//fmt.Println(record.Primary)
+		return true
+	})
+
+	idx.Tree.Ascend(&engine.PKItem{
+		PrimaryKey: 1,
+	}, func(item interface{}) bool {
+		it := item.(*engine.PKItem)
+		_ = engine.ReadRecordByLocator(&it.Locator)
 		return true
 	})
 
 	timer := (time.Now().UnixNano() - start) / 1000
 	fmt.Printf("Result time: %d mcs", timer)
-
 	engine.Close()
 }
 
 var pkIdx = engine.CreatePKIndex()
-var multiIdx = engine.CreateMulti()
-var idxMultiCities = engine.CreateMulti()
+
+//var multiIdx = engine.CreateMulti()
 
 func readBook(num int) {
 	page := engine.ReadPage(num)
@@ -68,22 +65,16 @@ func readBook(num int) {
 	var pos int64 = 0
 
 	for i := 0; i < 10000; i++ {
-		_rec, locator := page.ReadDataRecord(pos)
+		dataRecord, locator := page.ReadDataRecord(pos)
 
-		if _rec == nil {
+		if dataRecord == nil {
 			break
 		}
 
-		pos = locator.Offset
+		pos = pos + int64(locator.Size)
 
 		// build indexes
-		pkIdx.Add(_rec, *locator, _rec.Primary)
-		val, _ := strconv.Atoi(_rec.Data)
-
-		multiIdx.Add(val, _rec.Primary)
-		idxMultiCities.AddArray(_rec.Cities, _rec.Primary)
-
-		//fmt.Println(_rec)
+		pkIdx.Add(dataRecord, *locator, dataRecord.ID)
 	}
 }
 
@@ -102,23 +93,21 @@ func writeBook(num int) {
 			break
 		}
 
-		var cities = make([]int, 10)
-
-		for ci := 0; ci < 10; ci++ {
-			cities[ci] = rand.Intn(100000-1000) + 1000
+		dataRecord := &engine.DataRecord{
+			ID:     uint64(writePrimary),
+			Data:   strconv.Itoa(i),
+			Active: false,
 		}
 
-		dataRecord := engine.DataRecord{
-			Primary: writePrimary,
-			Data:    strconv.Itoa(i),
-			Cities:  cities,
-			Active:  false,
+		for ci := 0; ci < 10; ci++ {
+			city := &engine.City{Value: int32(rand.Intn(100000-1000) + 1000)}
+			dataRecord.Cities = append(dataRecord.Cities, city)
 		}
 
 		writePrimary++
 
 		recordOffset := page.PlaceRecord(dataRecord)
-		fmt.Printf("datarecord #%d offset %d\n", i, recordOffset)
+		fmt.Printf("datarecord #%d offset %d\n", writePrimary, recordOffset)
 	}
 
 	engine.OpenBook()

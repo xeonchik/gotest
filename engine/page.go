@@ -1,9 +1,8 @@
 package engine
 
 import (
-	"bufio"
 	"bytes"
-	"encoding/gob"
+	"encoding/binary"
 	"fmt"
 	"io"
 	"os"
@@ -15,6 +14,7 @@ const PageSize = 65536
 type Page struct {
 	Number int
 	Buffer bytes.Buffer
+	Dirty  bool
 }
 
 // Представление об одной записе на странице, хранит payload
@@ -29,21 +29,28 @@ func (p *Page) Free() int {
 	return PageSize - p.Buffer.Len()
 }
 
-func (p *Page) PlaceRecord(record DataRecord) int {
-	buffer := new(bytes.Buffer)
-	encoder := gob.NewEncoder(buffer)
-
-	err := encoder.Encode(record)
+func (p *Page) PlaceRecord(record *DataRecord) int {
+	data, err := record.MarshalBinary()
 	if err != nil {
 		panic(err)
 	}
 
-	offset := p.Buffer.Len()
-	p.Buffer.Write(buffer.Bytes())
-	return offset
+	length := len(data)
+	buf := make([]byte, 4)
+	binary.BigEndian.PutUint32(buf, uint32(length))
+
+	p.Buffer.Write(buf)
+	p.Buffer.Write(data)
+
+	return p.Buffer.Len()
 }
 
-func ReadRecordByLocator(locator DataRowLocator) *DataRecord {
+func ReadRecordByLocator(locator *DataRowLocator) *DataRecord {
+	if locator.Loaded {
+		return nil
+	}
+
+	_ = ReadPage(locator.Page)
 
 	offset := int64(locator.Page*PageSize) + locator.Offset
 	_, err := pageFile.Seek(offset, io.SeekStart)
@@ -52,51 +59,67 @@ func ReadRecordByLocator(locator DataRowLocator) *DataRecord {
 		panic(err)
 	}
 
-	reader = bufio.NewReader(pageFile)
-	decoder := gob.NewDecoder(reader)
-	rec := &DataRecord{}
-
-	err = decoder.Decode(&rec)
-	//if err == io.EOF {
-	//	return nil
-	//}
-
-	return rec
-}
-
-func (p *Page) ReadDataRecord(offset int64) (*DataRecord, *DataRowLocator) {
-	rd := bytes.NewReader(p.Buffer.Bytes())
-	_, err := rd.Seek(int64(offset), io.SeekStart)
+	buf := make([]byte, 4)
+	pageFile.Seek(offset, io.SeekStart)
+	_, err = pageFile.Read(buf)
 
 	if err != nil {
 		panic(err)
 	}
 
-	decoder := gob.NewDecoder(rd)
+	length := binary.BigEndian.Uint32(buf)
+	recordBuffer := make([]byte, length)
+	_, err = pageFile.Read(recordBuffer)
+	if err != nil {
+		panic(err)
+	}
+	record := &DataRecord{}
+	err = record.UnmarshalBinary(recordBuffer)
+	if err == io.EOF {
+		return nil
+	}
 
-	rec := &DataRecord{}
+	locator.Loaded = true
 
-	err = decoder.Decode(&rec)
+	return record
+}
+
+func (p *Page) ReadDataRecord(offset int64) (*DataRecord, *DataRowLocator) {
+
+	buf := make([]byte, 4)
+	_, err := p.Buffer.Read(buf)
 
 	if err == io.EOF {
 		return nil, nil
 	}
 
 	if err != nil {
+		panic(err)
+	}
+
+	length := binary.BigEndian.Uint32(buf)
+	recordBuffer := make([]byte, length)
+	p.Buffer.Read(recordBuffer)
+
+	record := &DataRecord{}
+	n, err := record.Unmarshal(recordBuffer)
+
+	if err == io.EOF {
 		return nil, nil
 	}
 
-	pos, _ := rd.Seek(0, io.SeekCurrent)
-	size := pos - offset
+	if err != nil {
+		panic(err)
+	}
 
 	locator := &DataRowLocator{
 		Page:   p.Number,
-		Offset: pos,
-		Size:   int(size),
+		Offset: offset,
+		Size:   n + 4,
 		Loaded: true,
 	}
 
-	return rec, locator
+	return record, locator
 }
 
 var pageFile *os.File = nil
@@ -135,7 +158,12 @@ func WritePage(page *Page) {
 	fmt.Println("written: ", length)
 }
 
+var pages []*Page
+
 func ReadPage(num int) *Page {
+	if pages[num] != nil {
+		return pages[num]
+	}
 
 	if pageFile == nil {
 		panic("book.dat is not opened.")
@@ -153,8 +181,10 @@ func ReadPage(num int) *Page {
 	buffer := &bytes.Buffer{}
 	buffer.Write(buf)
 
-	return &Page{
+	pages[num] = &Page{
 		Number: num,
 		Buffer: *buffer,
 	}
+
+	return pages[num]
 }

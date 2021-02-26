@@ -1,0 +1,18 @@
+package engine
+
+// Course is the grounds where the game of golf is played.
+type DataRecord struct {
+	ID    uint64
+	Data  text
+	Sectors []Sector
+	Cities []City
+	Active bool
+}
+
+type City struct {
+    value int32
+}
+
+type Sector struct {
+    value int32
+}

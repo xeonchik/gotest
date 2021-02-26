@@ -4,19 +4,11 @@ import (
 	"bufio"
 	"encoding/gob"
 	"github.com/golang/protobuf/proto"
-	pb "gotest/proto/dist/proto"
+	pb "godoc/proto/dist/proto"
 	"io/ioutil"
 	"log"
 	"os"
 )
-
-type DataRecord struct {
-	Primary int
-	Data    string
-	Sectors []int
-	Cities  []int
-	Active  bool
-}
 
 func ReadIndexFromDisk(name string) (*PKIndex, error) {
 	in, err := ioutil.ReadFile(name)
@@ -34,7 +26,7 @@ func ReadIndexFromDisk(name string) (*PKIndex, error) {
 
 	for _, item := range indexStore.Items {
 		record := &DataRecord{
-			Primary: int(item.Primary),
+			ID: uint64(item.Primary),
 		}
 		locator := &DataRowLocator{
 			Page:   int(item.PageNumber),
@@ -42,7 +34,7 @@ func ReadIndexFromDisk(name string) (*PKIndex, error) {
 			Size:   int(item.Size),
 			Loaded: false,
 		}
-		pkIdx.Load(record, *locator, record.Primary)
+		pkIdx.Load(record, *locator, record.ID)
 	}
 
 	return pkIdx, nil
