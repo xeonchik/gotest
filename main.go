@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"godoc/engine"
+	"godoc/table"
 	"io/ioutil"
 	"log"
 	"math/rand"
@@ -20,7 +21,7 @@ func main() {
 
 	start := time.Now().UnixNano()
 
-	for i := uint32(0); i < 1000; i++ {
+	for i := uint32(0); i < 300; i++ {
 		//writeBook(i)
 		readBook(i)
 	}
@@ -29,9 +30,15 @@ func main() {
 	log.Printf("init time: %d mcs", timer)
 
 	http.HandleFunc("/select", selectHandler)
+	http.HandleFunc("/select-cond", selectCondHandler)
+	http.HandleFunc("/select-by-city", byCitiesHandler)
 	http.HandleFunc("/sort", sortHandler)
 	http.HandleFunc("/count", countHandler)
-	http.ListenAndServe(":8090", nil)
+
+	err := http.ListenAndServe(":8090", nil)
+	if err != nil {
+		panic(err)
+	}
 
 	engine.Close()
 }
@@ -39,6 +46,7 @@ func main() {
 var records = make(map[uint64]*engine.DataEntity)
 var pkIdx = engine.CreatePKIndex()
 var ratingIdx = engine.CreateFloatIndex()
+var citiesIdx = engine.CreateMulti()
 
 func Sort(limit int, offset int) []*engine.DataRecord {
 	result := make([]*engine.DataRecord, 0)
@@ -60,6 +68,51 @@ func Sort(limit int, offset int) []*engine.DataRecord {
 	})
 
 	return result
+}
+
+// city IN (cities)
+func SelectByCity(cities []int, limit int, offset int) *table.TemporaryDataSet {
+	tbl := table.CreateTempTable()
+
+	for _, city := range cities {
+		item := citiesIdx.Get(city)
+		item.Keys.Tree.Walk(func(itemsWalker []interface{}) {
+			for _, itm := range itemsWalker {
+				flatItem := itm.(*engine.FlatItem)
+				id := flatItem.Value
+				entity := records[id]
+				tbl.Add(entity.Record)
+			}
+		})
+	}
+
+	return tbl
+}
+
+// id > n, order by sort
+func SelectWithConditions(limit int, offset int) *table.TemporaryDataSet {
+	tempTable := table.CreateTempTable()
+	n := uint64(10000)
+
+	ratingIdx.Tree.Ascend(nil, func(item interface{}) bool {
+		if limit == 0 {
+			return false
+		}
+
+		it := item.(*engine.FloatItem)
+
+		if it.Key <= n {
+			return false
+		}
+
+		record := records[it.Key]
+		tempTable.Add(record.Record)
+
+		limit--
+		return true
+	})
+
+	return tempTable
 }
 
 func Select(limit int, offset int) []*engine.DataRecord {
@@ -87,24 +140,22 @@ func countHandler(rw http.ResponseWriter, req *http.Request) {
 	fmt.Fprintf(rw, "Count items: %d\n", pkIdx.Tree.Len())
 }
 
+func byCitiesHandler(rw http.ResponseWriter, req *http.Request) {
+	var limit, offset int
+	limit, offset = GetLimitOffsetFromURL(req)
+
+	var cities = []int{30000}
+
+	result := SelectByCity(cities, limit, offset)
+
+	for _, element := range result.Records {
+		PrintRecord(rw, element)
+	}
+}
+
 func sortHandler(rw http.ResponseWriter, req *http.Request) {
 	var limit, offset int
-
-	limitParams, ok := req.URL.Query()["limit"]
-	if !ok {
-		limit = 10
-	} else {
-		limStr := limitParams[0]
-		limit, _ = strconv.Atoi(limStr)
-	}
-
-	offsetParams, ok := req.URL.Query()["offset"]
-	if !ok {
-		offset = 0
-	} else {
-		offsetStr := offsetParams[0]
-		offset, _ = strconv.Atoi(offsetStr)
-	}
+	limit, offset = GetLimitOffsetFromURL(req)
 
 	start := time.Now().UnixNano()
 
@@ -112,8 +163,8 @@ func sortHandler(rw http.ResponseWriter, req *http.Request) {
 
 	timer := (time.Now().UnixNano() - start) / 1000
 
-	for i, element := range result {
-		fmt.Fprintf(rw, "Entry: %+v %v\n", element, i)
+	for _, element := range result {
+		PrintRecord(rw, element)
 	}
 
 	log.Printf("sort time: %d mcs", timer)
@@ -121,22 +172,7 @@ func sortHandler(rw http.ResponseWriter, req *http.Request) {
 
 func selectHandler(rw http.ResponseWriter, req *http.Request) {
 	var limit, offset int
-
-	limitParams, ok := req.URL.Query()["limit"]
-	if !ok {
-		limit = 10
-	} else {
-		limStr := limitParams[0]
-		limit, _ = strconv.Atoi(limStr)
-	}
-
-	offsetParams, ok := req.URL.Query()["offset"]
-	if !ok {
-		offset = 0
-	} else {
-		offsetStr := offsetParams[0]
-		offset, _ = strconv.Atoi(offsetStr)
-	}
+	limit, offset = GetLimitOffsetFromURL(req)
 
 	start := time.Now().UnixNano()
 
@@ -144,7 +180,24 @@ func selectHandler(rw http.ResponseWriter, req *http.Request) {
 
 	timer := (time.Now().UnixNano() - start) / 1000
 
-	for i, element := range result {
+	for _, element := range result {
+		PrintRecord(rw, element)
+	}
+
+	log.Printf("select time: %d mcs", timer)
+}
+
+func selectCondHandler(rw http.ResponseWriter, req *http.Request) {
+	var limit, offset int
+	limit, offset = GetLimitOffsetFromURL(req)
+
+	start := time.Now().UnixNano()
+
+	result := SelectWithConditions(limit, offset)
+
+	timer := (time.Now().UnixNano() - start) / 1000
+
+	for i, element := range result.Records {
 		fmt.Fprintf(rw, "Entry: %+v %v\n", element, i)
 	}
 
@@ -172,6 +225,10 @@ func readBook(pageNumber uint32) {
 		// build indexes
 		pkIdx.Add(entity.Record, entity.Locator, entity.Record.ID)
 		ratingIdx.Add(float64(entity.Record.Sort), entity.Record.ID)
+
+		for _, city := range entity.Record.Cities {
+			citiesIdx.Add(int(city.Value), entity.Record.ID)
+		}
 
 		// add to map
 		records[entity.Record.ID] = entity
@@ -242,6 +299,28 @@ func pushHandler(rw http.ResponseWriter, req *http.Request) {
 	log.Println(t.Sectors)
 }
 
-func listHandler(rw http.ResponseWriter, req *http.Request) {
+func PrintRecord(rw http.ResponseWriter, rec *engine.DataRecord) {
+	fmt.Fprintf(rw, "Entry: %+v\n", rec)
+}
 
+func GetLimitOffsetFromURL(req *http.Request) (int, int) {
+	var limit, offset int
+
+	limitParams, ok := req.URL.Query()["limit"]
+	if !ok {
+		limit = 10
+	} else {
+		limStr := limitParams[0]
+		limit, _ = strconv.Atoi(limStr)
+	}
+
+	offsetParams, ok := req.URL.Query()["offset"]
+	if !ok {
+		offset = 0
+	} else {
+		offsetStr := offsetParams[0]
+		offset, _ = strconv.Atoi(offsetStr)
+	}
+
+	return limit, offset
 }
