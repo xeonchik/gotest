@@ -5,6 +5,20 @@ import (
 	"github.com/tidwall/btree"
 )
 
+type FloatIndex struct {
+	Tree *btree.BTree
+}
+
+type FloatItem struct {
+	IdxValue float64
+	Key      uint64
+}
+
+func byFloatVal(a, b interface{}) bool {
+	i1, i2 := a.(*FloatItem), b.(*FloatItem)
+	return i1.IdxValue < i2.IdxValue
+}
+
 type FlatIndex struct {
 	Tree *btree.BTree
 }
@@ -127,6 +141,19 @@ func (idx *PKIndex) Add(record *DataRecord, locator DataRowLocator, key uint64) 
 	idx.Tree.Set(&item)
 }
 
+func (idx *FloatIndex) Add(value float64, key uint64) {
+	item := FloatItem{
+		IdxValue: value,
+		Key:      key,
+	}
+
+	//if idx.Tree.Get(&item) != nil {
+	//	panic("Float idx already exists")
+	//}
+
+	idx.Tree.Set(&item)
+}
+
 func (idx *PKIndex) Print() {
 	point := &PKItem{
 		PrimaryKey: 0,
@@ -149,6 +176,12 @@ func CreatePKIndex() *PKIndex {
 func CreateMulti() *MultiIndex {
 	return &MultiIndex{
 		Tree: btree.New(byIdxVal),
+	}
+}
+
+func CreateFloatIndex() *FloatIndex {
+	return &FloatIndex{
+		Tree: btree.New(byFloatVal),
 	}
 }
 

@@ -16,73 +16,173 @@ func main() {
 	fmt.Println("Hello, World")
 
 	engine.OpenBook()
+	engine.PreloadBookPages()
 
-	for i := 0; i < 100; i++ {
+	start := time.Now().UnixNano()
+
+	for i := uint32(0); i < 1000; i++ {
 		//writeBook(i)
-		//readBook(i)
+		readBook(i)
 	}
 
-	//engine.FlushIndexToDisk(pkIdx, "primary.idx")
-	idx, err := engine.ReadIndexFromDisk("primary.idx")
+	timer := (time.Now().UnixNano() - start) / 1000
+	log.Printf("init time: %d mcs", timer)
 
-	if err != nil {
-		panic(err)
+	http.HandleFunc("/select", selectHandler)
+	http.HandleFunc("/sort", sortHandler)
+	http.HandleFunc("/count", countHandler)
+	http.ListenAndServe(":8090", nil)
+
+	engine.Close()
+}
+
+var records = make(map[uint64]*engine.DataEntity)
+var pkIdx = engine.CreatePKIndex()
+var ratingIdx = engine.CreateFloatIndex()
+
+func Sort(limit int, offset int) []*engine.DataRecord {
+	result := make([]*engine.DataRecord, 0)
+
+	ratingIdx.Tree.Ascend(nil, func(item interface{}) bool {
+		if offset > 0 {
+			offset--
+			return true // just continue walking
+		}
+		if limit == 0 {
+			return false
+		}
+		it := item.(*engine.FloatItem)
+		record := records[it.Key]
+
+		result = append(result, record.Record)
+		limit--
+		return true
+	})
+
+	return result
+}
+
+func Select(limit int, offset int) []*engine.DataRecord {
+	result := make([]*engine.DataRecord, 0)
+
+	pkIdx.Tree.Ascend(nil, func(item interface{}) bool {
+		if offset > 0 {
+			offset--
+			return true // just continue walking
+		}
+
+		if limit == 0 {
+			return false
+		}
+		it := item.(*engine.PKItem)
+		result = append(result, it.Record)
+		limit--
+		return true
+	})
+
+	return result
+}
+
+func countHandler(rw http.ResponseWriter, req *http.Request) {
+	fmt.Fprintf(rw, "Count items: %d\n", pkIdx.Tree.Len())
+}
+
+func sortHandler(rw http.ResponseWriter, req *http.Request) {
+	var limit, offset int
+
+	limitParams, ok := req.URL.Query()["limit"]
+	if !ok {
+		limit = 10
+	} else {
+		limStr := limitParams[0]
+		limit, _ = strconv.Atoi(limStr)
+	}
+
+	offsetParams, ok := req.URL.Query()["offset"]
+	if !ok {
+		offset = 0
+	} else {
+		offsetStr := offsetParams[0]
+		offset, _ = strconv.Atoi(offsetStr)
 	}
 
 	start := time.Now().UnixNano()
 
-	idx.Tree.Ascend(&engine.PKItem{
-		PrimaryKey: 1,
-	}, func(item interface{}) bool {
-		it := item.(*engine.PKItem)
-
-		it.Record = engine.ReadRecordByLocator(&it.Locator)
-		it.Locator.Loaded = true
-
-		return true
-	})
-
-	idx.Tree.Ascend(&engine.PKItem{
-		PrimaryKey: 1,
-	}, func(item interface{}) bool {
-		it := item.(*engine.PKItem)
-		_ = engine.ReadRecordByLocator(&it.Locator)
-		return true
-	})
+	result := Sort(limit, offset)
 
 	timer := (time.Now().UnixNano() - start) / 1000
-	fmt.Printf("Result time: %d mcs", timer)
-	engine.Close()
+
+	for i, element := range result {
+		fmt.Fprintf(rw, "Entry: %+v %v\n", element, i)
+	}
+
+	log.Printf("sort time: %d mcs", timer)
 }
 
-var pkIdx = engine.CreatePKIndex()
+func selectHandler(rw http.ResponseWriter, req *http.Request) {
+	var limit, offset int
 
-//var multiIdx = engine.CreateMulti()
+	limitParams, ok := req.URL.Query()["limit"]
+	if !ok {
+		limit = 10
+	} else {
+		limStr := limitParams[0]
+		limit, _ = strconv.Atoi(limStr)
+	}
 
-func readBook(num int) {
-	page := engine.ReadPage(num)
+	offsetParams, ok := req.URL.Query()["offset"]
+	if !ok {
+		offset = 0
+	} else {
+		offsetStr := offsetParams[0]
+		offset, _ = strconv.Atoi(offsetStr)
+	}
+
+	start := time.Now().UnixNano()
+
+	result := Select(limit, offset)
+
+	timer := (time.Now().UnixNano() - start) / 1000
+
+	for i, element := range result {
+		fmt.Fprintf(rw, "Entry: %+v %v\n", element, i)
+	}
+
+	log.Printf("select time: %d mcs", timer)
+}
+
+func readBook(pageNumber uint32) {
+	page := engine.GetPage(pageNumber)
+
+	if page == nil {
+		return
+	}
 
 	var pos int64 = 0
 
 	for i := 0; i < 10000; i++ {
-		dataRecord, locator := page.ReadDataRecord(pos)
+		entity := page.ReadDataRecord(pos)
 
-		if dataRecord == nil {
+		if entity == nil {
 			break
 		}
 
-		pos = pos + int64(locator.Size)
+		pos = pos + int64(entity.Locator.Size)
 
 		// build indexes
-		pkIdx.Add(dataRecord, *locator, dataRecord.ID)
+		pkIdx.Add(entity.Record, entity.Locator, entity.Record.ID)
+		ratingIdx.Add(float64(entity.Record.Sort), entity.Record.ID)
+
+		// add to map
+		records[entity.Record.ID] = entity
 	}
 }
 
 var writePrimary = 1
 
-func writeBook(num int) {
+func writeBook(num uint32) {
 	page := &engine.Page{
-		Number: num,
+		Number: int(num),
 	}
 
 	rand.Seed(time.Now().UTC().UnixNano())
@@ -103,6 +203,11 @@ func writeBook(num int) {
 			city := &engine.City{Value: int32(rand.Intn(100000-1000) + 1000)}
 			dataRecord.Cities = append(dataRecord.Cities, city)
 		}
+
+		min := 10.1
+		max := 104044.12
+		r := min + rand.Float64()*(max-min)
+		dataRecord.Sort = float32(r)
 
 		writePrimary++
 

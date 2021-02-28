@@ -7,6 +7,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
+	"math"
 )
 
 var intconv = binary.BigEndian
@@ -52,6 +53,8 @@ type DataRecord struct {
 	Cities []*City
 
 	Active bool
+
+	Sort float32
 }
 
 // MarshalTo encodes o as Colfer into buf and returns the number of bytes written.
@@ -136,6 +139,12 @@ func (o *DataRecord) MarshalTo(buf []byte) int {
 		i++
 	}
 
+	if v := o.Sort; v != 0 {
+		buf[i] = 5
+		intconv.PutUint32(buf[i+1:], math.Float32bits(v))
+		i += 5
+	}
+
 	buf[i] = 0x7f
 	i++
 	return i
@@ -211,6 +220,10 @@ func (o *DataRecord) MarshalLen() (int, error) {
 
 	if o.Active {
 		l++
+	}
+
+	if o.Sort != 0 {
+		l += 5
 	}
 
 	if l > ColferSizeMax {
@@ -431,6 +444,17 @@ func (o *DataRecord) Unmarshal(data []byte) (int, error) {
 			goto eof
 		}
 		o.Active = true
+		header = data[i]
+		i++
+	}
+
+	if header == 5 {
+		start := i
+		i += 4
+		if i >= len(data) {
+			goto eof
+		}
+		o.Sort = math.Float32frombits(intconv.Uint32(data[start:]))
 		header = data[i]
 		i++
 	}

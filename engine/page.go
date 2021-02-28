@@ -25,6 +25,13 @@ type DataRowLocator struct {
 	Loaded bool
 }
 
+type DataEntity struct {
+	Record  *DataRecord
+	Locator DataRowLocator
+}
+
+var pagesMap = make(map[uint32]*Page)
+
 func (p *Page) Free() int {
 	return PageSize - p.Buffer.Len()
 }
@@ -45,12 +52,12 @@ func (p *Page) PlaceRecord(record *DataRecord) int {
 	return p.Buffer.Len()
 }
 
+/// Not a good way to load records...
+/// @deprecated
 func ReadRecordByLocator(locator *DataRowLocator) *DataRecord {
 	if locator.Loaded {
 		return nil
 	}
-
-	_ = ReadPage(locator.Page)
 
 	offset := int64(locator.Page*PageSize) + locator.Offset
 	_, err := pageFile.Seek(offset, io.SeekStart)
@@ -84,13 +91,13 @@ func ReadRecordByLocator(locator *DataRowLocator) *DataRecord {
 	return record
 }
 
-func (p *Page) ReadDataRecord(offset int64) (*DataRecord, *DataRowLocator) {
+func (p *Page) ReadDataRecord(offset int64) *DataEntity {
 
 	buf := make([]byte, 4)
 	_, err := p.Buffer.Read(buf)
 
 	if err == io.EOF {
-		return nil, nil
+		return nil
 	}
 
 	if err != nil {
@@ -105,21 +112,26 @@ func (p *Page) ReadDataRecord(offset int64) (*DataRecord, *DataRowLocator) {
 	n, err := record.Unmarshal(recordBuffer)
 
 	if err == io.EOF {
-		return nil, nil
+		return nil
 	}
 
 	if err != nil {
 		panic(err)
 	}
 
-	locator := &DataRowLocator{
+	locator := DataRowLocator{
 		Page:   p.Number,
 		Offset: offset,
 		Size:   n + 4,
 		Loaded: true,
 	}
 
-	return record, locator
+	entity := &DataEntity{
+		Record:  record,
+		Locator: locator,
+	}
+
+	return entity
 }
 
 var pageFile *os.File = nil
@@ -136,8 +148,46 @@ func OpenBook() {
 
 func Close() {
 	if pageFile != nil {
-		pageFile.Close()
+		err := pageFile.Close()
+		if err != nil {
+			panic(err)
+		}
+		pageFile = nil
 	}
+}
+
+/// Flushed all dirty pages to disk
+func Flush() {
+
+}
+
+func PreloadBookPages() {
+	pagesCount := GetPagesCount()
+	for i := 0; uint32(i) < pagesCount; i++ {
+		pagesMap[uint32(i)] = _readPage(i)
+	}
+}
+
+func GetPagesCount() uint32 {
+	if pageFile == nil {
+		panic("book.dat is not opened.")
+	}
+
+	info, err := pageFile.Stat()
+
+	if err != nil {
+		panic(err)
+	}
+
+	return uint32(info.Size() / PageSize)
+}
+
+func GetPage(num uint32) *Page {
+	page, ok := pagesMap[num]
+	if !ok {
+		return nil
+	}
+	return page
 }
 
 func WritePage(page *Page) {
@@ -158,13 +208,7 @@ func WritePage(page *Page) {
 	fmt.Println("written: ", length)
 }
 
-var pages []*Page
-
-func ReadPage(num int) *Page {
-	if pages[num] != nil {
-		return pages[num]
-	}
-
+func _readPage(num int) *Page {
 	if pageFile == nil {
 		panic("book.dat is not opened.")
 	}
@@ -181,10 +225,9 @@ func ReadPage(num int) *Page {
 	buffer := &bytes.Buffer{}
 	buffer.Write(buf)
 
-	pages[num] = &Page{
+	return &Page{
 		Number: num,
 		Buffer: *buffer,
+		Dirty:  false,
 	}
-
-	return pages[num]
 }
