@@ -13,17 +13,30 @@ import (
 	"time"
 )
 
+var tbl = engine.InitTableSpace("default")
+
 func main() {
 	fmt.Println("Hello, World")
 
 	engine.OpenBook()
 	engine.PreloadBookPages()
 
+	// create index by sort
+	var indexer = func(idx interface{}, record *engine.DataRecord) {
+		index := idx.(*engine.FloatIndex)
+		index.Add(float64(record.Sort), record.ID)
+	}
+	var idx = engine.CreateFloatIndex()
+	idx.A()
+
+	tbl.AddIndexer("sortIdx", idx, indexer)
+
+	readBook(tbl)
+
 	start := time.Now().UnixNano()
 
-	for i := uint32(0); i < 300; i++ {
+	for i := uint32(0); i < 100; i++ {
 		//writeBook(i)
-		readBook(i)
 	}
 
 	timer := (time.Now().UnixNano() - start) / 1000
@@ -43,8 +56,6 @@ func main() {
 	engine.Close()
 }
 
-var records = make(map[uint64]*engine.DataEntity)
-var pkIdx = engine.CreatePKIndex()
 var ratingIdx = engine.CreateFloatIndex()
 var citiesIdx = engine.CreateMulti()
 
@@ -60,9 +71,8 @@ func Sort(limit int, offset int) []*engine.DataRecord {
 			return false
 		}
 		it := item.(*engine.FloatItem)
-		record := records[it.Key]
+		result = append(result, tbl.GetByPK(it.Key))
 
-		result = append(result, record.Record)
 		limit--
 		return true
 	})
@@ -72,7 +82,7 @@ func Sort(limit int, offset int) []*engine.DataRecord {
 
 // city IN (cities)
 func SelectByCity(cities []int, limit int, offset int) *table.TemporaryDataSet {
-	tbl := table.CreateTempTable()
+	tempTable := table.CreateTempTable()
 
 	for _, city := range cities {
 		item := citiesIdx.Get(city)
@@ -80,13 +90,12 @@ func SelectByCity(cities []int, limit int, offset int) *table.TemporaryDataSet {
 			for _, itm := range itemsWalker {
 				flatItem := itm.(*engine.FlatItem)
 				id := flatItem.Value
-				entity := records[id]
-				tbl.Add(entity.Record)
+				tempTable.Add(tbl.GetByPK(id))
 			}
 		})
 	}
 
-	return tbl
+	return tempTable
 }
 
 // id > n, order by sort
@@ -105,8 +114,7 @@ func SelectWithConditions(limit int, offset int) *table.TemporaryDataSet {
 			return false
 		}
 
-		record := records[it.Key]
-		tempTable.Add(record.Record)
+		tempTable.Add(tbl.GetByPK(it.Key))
 
 		limit--
 		return true
@@ -118,7 +126,7 @@ func SelectWithConditions(limit int, offset int) *table.TemporaryDataSet {
 func Select(limit int, offset int) []*engine.DataRecord {
 	result := make([]*engine.DataRecord, 0)
 
-	pkIdx.Tree.Ascend(nil, func(item interface{}) bool {
+	tbl.PrimaryIndex.Tree.Ascend(nil, func(item interface{}) bool {
 		if offset > 0 {
 			offset--
 			return true // just continue walking
@@ -137,7 +145,7 @@ func Select(limit int, offset int) []*engine.DataRecord {
 }
 
 func countHandler(rw http.ResponseWriter, req *http.Request) {
-	fmt.Fprintf(rw, "Count items: %d\n", pkIdx.Tree.Len())
+	fmt.Fprintf(rw, "Count items: %d\n", tbl.PrimaryIndex.Tree.Len())
 }
 
 func byCitiesHandler(rw http.ResponseWriter, req *http.Request) {
@@ -204,35 +212,20 @@ func selectCondHandler(rw http.ResponseWriter, req *http.Request) {
 	log.Printf("select time: %d mcs", timer)
 }
 
-func readBook(pageNumber uint32) {
-	page := engine.GetPage(pageNumber)
+func readBook(table *engine.Table) {
 
-	if page == nil {
-		return
+	for i := uint32(0); i < engine.GetPagesCount(); i++ {
+		page := engine.GetPage(i)
+		table.ReadPageRecords(page)
 	}
 
-	var pos int64 = 0
-
-	for i := 0; i < 10000; i++ {
-		entity := page.ReadDataRecord(pos)
-
-		if entity == nil {
-			break
-		}
-
-		pos = pos + int64(entity.Locator.Size)
-
-		// build indexes
-		pkIdx.Add(entity.Record, entity.Locator, entity.Record.ID)
-		ratingIdx.Add(float64(entity.Record.Sort), entity.Record.ID)
-
-		for _, city := range entity.Record.Cities {
-			citiesIdx.Add(int(city.Value), entity.Record.ID)
-		}
-
-		// add to map
-		records[entity.Record.ID] = entity
-	}
+	//	// build indexes
+	//	ratingIdx.Add(float64(entity.Record.Sort), entity.Record.ID)
+	//
+	//	for _, city := range entity.Record.Cities {
+	//		citiesIdx.Add(int(city.Value), entity.Record.ID)
+	//	}
+	//}
 }
 
 var writePrimary = 1

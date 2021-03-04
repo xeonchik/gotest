@@ -5,8 +5,20 @@ import (
 	"github.com/tidwall/btree"
 )
 
-type FloatIndex struct {
+type IndexType interface {
+	Add()
+}
+
+type BTIndex struct {
 	Tree *btree.BTree
+}
+
+type FloatIndex struct {
+	BTIndex
+}
+
+func (idx *FloatIndex) A() {
+	panic("implement me")
 }
 
 type FloatItem struct {
@@ -147,10 +159,6 @@ func (idx *FloatIndex) Add(value float64, key uint64) {
 		Key:      key,
 	}
 
-	//if idx.Tree.Get(&item) != nil {
-	//	panic("Float idx already exists")
-	//}
-
 	idx.Tree.Set(&item)
 }
 
@@ -181,7 +189,7 @@ func CreateMulti() *MultiIndex {
 
 func CreateFloatIndex() *FloatIndex {
 	return &FloatIndex{
-		Tree: btree.New(byFloatVal),
+		//BTIndex{Tree: btree.New(byFloatVal)},
 	}
 }
 
