@@ -10,14 +10,15 @@ import (
 
 const PageSize = 65536
 
-// Страница содержащая записи DataRowLocator
+// Page represent a one piece of the large store, that contains a DataRecord(s)
+// limited by the PageSize
 type Page struct {
 	Number int
 	Buffer bytes.Buffer
 	Dirty  bool
 }
 
-// Представление об одной записе на странице, хранит payload
+// DataRowLocator is a pointer of stored data record
 type DataRowLocator struct {
 	Page   int
 	Offset int64
@@ -25,6 +26,7 @@ type DataRowLocator struct {
 	Loaded bool
 }
 
+// DataEntity is a combination of record and it pointer (locator)
 type DataEntity struct {
 	Record  *DataRecord
 	Locator DataRowLocator
@@ -50,45 +52,6 @@ func (p *Page) PlaceRecord(record *DataRecord) int {
 	p.Buffer.Write(data)
 
 	return p.Buffer.Len()
-}
-
-/// Not a good way to load records...
-/// @deprecated
-func ReadRecordByLocator(locator *DataRowLocator) *DataRecord {
-	if locator.Loaded {
-		return nil
-	}
-
-	offset := int64(locator.Page*PageSize) + locator.Offset
-	_, err := pageFile.Seek(offset, io.SeekStart)
-
-	if err != nil {
-		panic(err)
-	}
-
-	buf := make([]byte, 4)
-	pageFile.Seek(offset, io.SeekStart)
-	_, err = pageFile.Read(buf)
-
-	if err != nil {
-		panic(err)
-	}
-
-	length := binary.BigEndian.Uint32(buf)
-	recordBuffer := make([]byte, length)
-	_, err = pageFile.Read(recordBuffer)
-	if err != nil {
-		panic(err)
-	}
-	record := &DataRecord{}
-	err = record.UnmarshalBinary(recordBuffer)
-	if err == io.EOF {
-		return nil
-	}
-
-	locator.Loaded = true
-
-	return record
 }
 
 func (p *Page) ReadDataRecord(offset int64) *DataEntity {
