@@ -5,32 +5,6 @@ import (
 	"github.com/tidwall/btree"
 )
 
-type IndexType interface {
-	Add()
-}
-
-type BTIndex struct {
-	Tree *btree.BTree
-}
-
-type FloatIndex struct {
-	BTIndex
-}
-
-func (idx *FloatIndex) A() {
-	panic("implement me")
-}
-
-type FloatItem struct {
-	IdxValue float64
-	Key      uint64
-}
-
-func byFloatVal(a, b interface{}) bool {
-	i1, i2 := a.(*FloatItem), b.(*FloatItem)
-	return i1.IdxValue < i2.IdxValue
-}
-
 type FlatIndex struct {
 	Tree *btree.BTree
 }
@@ -58,22 +32,7 @@ func byIdxVal(a, b interface{}) bool {
 	return i1.IdxValue < i2.IdxValue
 }
 
-type PKIndex struct {
-	Tree *btree.BTree
-}
-
-type PKItem struct {
-	Record     *DataRecord
-	Locator    DataRowLocator
-	PrimaryKey uint64
-}
-
-func byKey(a, b interface{}) bool {
-	i1, i2 := a.(*PKItem), b.(*PKItem)
-	return i1.PrimaryKey < i2.PrimaryKey
-}
-
-/// indexValue - Record
+// Add / indexValue - Record
 /// PrimaryKey - PK Link
 func (idx *MultiIndex) Add(indexValue int, key uint64) {
 	// check that exists
@@ -115,14 +74,6 @@ func (idx *MultiIndex) Print() {
 	})
 }
 
-func (idx *PKIndex) Get(key uint64) *PKItem {
-	StatsObj.Hits += 1
-	item := idx.Tree.Get(&PKItem{
-		PrimaryKey: key,
-	}).(*PKItem)
-	return item
-}
-
 func (idx *MultiIndex) Get(key int) *MultiItem {
 	StatsObj.Hits += 1
 	return idx.Tree.Get(&MultiItem{
@@ -130,27 +81,30 @@ func (idx *MultiIndex) Get(key int) *MultiItem {
 	}).(*MultiItem)
 }
 
-func (idx *PKIndex) Load(record *DataRecord, locator DataRowLocator, key uint64) {
-	item := PKItem{
-		Record:     record,
-		PrimaryKey: key,
-		Locator:    locator,
-	}
-	idx.Tree.Load(&item)
+type IndexType interface {
+	Add()
 }
 
-func (idx *PKIndex) Add(record *DataRecord, locator DataRowLocator, key uint64) {
-	item := PKItem{
-		Record:     record,
-		PrimaryKey: key,
-		Locator:    locator,
-	}
+type BTIndex struct {
+	Tree *btree.BTree
+}
 
-	if idx.Tree.Get(&item) != nil {
-		panic("PK already exists")
-	}
+type FloatIndex struct {
+	BTIndex
+}
 
-	idx.Tree.Set(&item)
+func (idx *FloatIndex) A() {
+	panic("implement me")
+}
+
+type FloatItem struct {
+	IdxValue float64
+	Key      uint64
+}
+
+func byFloatVal(a, b interface{}) bool {
+	i1, i2 := a.(*FloatItem), b.(*FloatItem)
+	return i1.IdxValue < i2.IdxValue
 }
 
 func (idx *FloatIndex) Add(value float64, key uint64) {
@@ -162,34 +116,15 @@ func (idx *FloatIndex) Add(value float64, key uint64) {
 	idx.Tree.Set(&item)
 }
 
-func (idx *PKIndex) Print() {
-	point := &PKItem{
-		PrimaryKey: 0,
+func CreateFloatIndex() *FloatIndex {
+	return &FloatIndex{
+		BTIndex{Tree: btree.New(byFloatVal)},
 	}
-
-	idx.Tree.Ascend(point, func(item interface{}) bool {
-		it := item.(*PKItem)
-		fmt.Println(it.Record.ID)
-		return true
-	})
-}
-
-func CreatePKIndex() *PKIndex {
-	idx := &PKIndex{
-		Tree: btree.New(byKey),
-	}
-	return idx
 }
 
 func CreateMulti() *MultiIndex {
 	return &MultiIndex{
 		Tree: btree.New(byIdxVal),
-	}
-}
-
-func CreateFloatIndex() *FloatIndex {
-	return &FloatIndex{
-		//BTIndex{Tree: btree.New(byFloatVal)},
 	}
 }
 

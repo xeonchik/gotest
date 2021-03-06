@@ -1,14 +1,11 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
 	"godoc/engine"
 	"godoc/table"
-	"io/ioutil"
 	"log"
 	"math/rand"
-	"net/http"
 	"strconv"
 	"time"
 )
@@ -16,7 +13,7 @@ import (
 var tbl = engine.InitTableSpace("default")
 
 func main() {
-	fmt.Println("Hello, World")
+	fmt.Println("Hello! Starting GoDoc!")
 
 	engine.OpenBook()
 	engine.PreloadBookPages()
@@ -26,10 +23,10 @@ func main() {
 		index := idx.(*engine.FloatIndex)
 		index.Add(float64(record.Sort), record.ID)
 	}
-	var idx = engine.CreateFloatIndex()
-	idx.A()
-
-	tbl.AddIndexer("sortIdx", idx, indexer)
+	err := tbl.AddIndexer("sortIdx", engine.CreateFloatIndex(), indexer)
+	if err != nil {
+		panic(err)
+	}
 
 	readBook(tbl)
 
@@ -42,17 +39,7 @@ func main() {
 	timer := (time.Now().UnixNano() - start) / 1000
 	log.Printf("init time: %d mcs", timer)
 
-	http.HandleFunc("/select", selectHandler)
-	http.HandleFunc("/select-cond", selectCondHandler)
-	http.HandleFunc("/select-by-city", byCitiesHandler)
-	http.HandleFunc("/sort", sortHandler)
-	http.HandleFunc("/count", countHandler)
-
-	err := http.ListenAndServe(":8090", nil)
-	if err != nil {
-		panic(err)
-	}
-
+	StartServer()
 	engine.Close()
 }
 
@@ -80,7 +67,7 @@ func Sort(limit int, offset int) []*engine.DataRecord {
 	return result
 }
 
-// city IN (cities)
+// SelectByCity city IN (cities)
 func SelectByCity(cities []int, limit int, offset int) *table.TemporaryDataSet {
 	tempTable := table.CreateTempTable()
 
@@ -98,7 +85,7 @@ func SelectByCity(cities []int, limit int, offset int) *table.TemporaryDataSet {
 	return tempTable
 }
 
-// id > n, order by sort
+// SelectWithConditions / SelectWithConditions id > n, order by sort
 func SelectWithConditions(limit int, offset int) *table.TemporaryDataSet {
 	tempTable := table.CreateTempTable()
 	n := uint64(10000)
@@ -142,74 +129,6 @@ func Select(limit int, offset int) []*engine.DataRecord {
 	})
 
 	return result
-}
-
-func countHandler(rw http.ResponseWriter, req *http.Request) {
-	fmt.Fprintf(rw, "Count items: %d\n", tbl.PrimaryIndex.Tree.Len())
-}
-
-func byCitiesHandler(rw http.ResponseWriter, req *http.Request) {
-	var limit, offset int
-	limit, offset = GetLimitOffsetFromURL(req)
-
-	var cities = []int{30000}
-
-	result := SelectByCity(cities, limit, offset)
-
-	for _, element := range result.Records {
-		PrintRecord(rw, element)
-	}
-}
-
-func sortHandler(rw http.ResponseWriter, req *http.Request) {
-	var limit, offset int
-	limit, offset = GetLimitOffsetFromURL(req)
-
-	start := time.Now().UnixNano()
-
-	result := Sort(limit, offset)
-
-	timer := (time.Now().UnixNano() - start) / 1000
-
-	for _, element := range result {
-		PrintRecord(rw, element)
-	}
-
-	log.Printf("sort time: %d mcs", timer)
-}
-
-func selectHandler(rw http.ResponseWriter, req *http.Request) {
-	var limit, offset int
-	limit, offset = GetLimitOffsetFromURL(req)
-
-	start := time.Now().UnixNano()
-
-	result := Select(limit, offset)
-
-	timer := (time.Now().UnixNano() - start) / 1000
-
-	for _, element := range result {
-		PrintRecord(rw, element)
-	}
-
-	log.Printf("select time: %d mcs", timer)
-}
-
-func selectCondHandler(rw http.ResponseWriter, req *http.Request) {
-	var limit, offset int
-	limit, offset = GetLimitOffsetFromURL(req)
-
-	start := time.Now().UnixNano()
-
-	result := SelectWithConditions(limit, offset)
-
-	timer := (time.Now().UnixNano() - start) / 1000
-
-	for i, element := range result.Records {
-		fmt.Fprintf(rw, "Entry: %+v %v\n", element, i)
-	}
-
-	log.Printf("select time: %d mcs", timer)
 }
 
 func readBook(table *engine.Table) {
@@ -267,53 +186,4 @@ func writeBook(num uint32) {
 
 	engine.OpenBook()
 	engine.WritePage(page)
-}
-
-type testStruct struct {
-	Id      int
-	Sectors []int
-	Cities  []int
-	Active  bool
-}
-
-func pushHandler(rw http.ResponseWriter, req *http.Request) {
-
-	body, err := ioutil.ReadAll(req.Body)
-
-	if err != nil {
-		panic(err)
-	}
-
-	var t testStruct
-	err = json.Unmarshal(body, &t)
-	if err != nil {
-		panic(err)
-	}
-	log.Println(t.Sectors)
-}
-
-func PrintRecord(rw http.ResponseWriter, rec *engine.DataRecord) {
-	fmt.Fprintf(rw, "Entry: %+v\n", rec)
-}
-
-func GetLimitOffsetFromURL(req *http.Request) (int, int) {
-	var limit, offset int
-
-	limitParams, ok := req.URL.Query()["limit"]
-	if !ok {
-		limit = 10
-	} else {
-		limStr := limitParams[0]
-		limit, _ = strconv.Atoi(limStr)
-	}
-
-	offsetParams, ok := req.URL.Query()["offset"]
-	if !ok {
-		offset = 0
-	} else {
-		offsetStr := offsetParams[0]
-		offset, _ = strconv.Atoi(offsetStr)
-	}
-
-	return limit, offset
 }

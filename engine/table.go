@@ -8,7 +8,7 @@ type Table struct {
 }
 
 type IndexDefinition struct {
-	index   *IndexType
+	index   interface{}
 	indexer indexer
 }
 
@@ -20,6 +20,7 @@ func InitTableSpace(name string) *Table {
 	primaryIdx := CreatePKIndex()
 	table := &Table{
 		PrimaryIndex: primaryIdx,
+		Indexes:      make(map[string]IndexDefinition),
 	}
 	tableSpace[name] = table
 	return table
@@ -56,5 +57,12 @@ func (tbl *Table) ReadPageRecords(page *Page) {
 
 		// add to PK index
 		tbl.PrimaryIndex.Add(entity.Record, entity.Locator, entity.Record.ID)
+		tbl.RecordAddToIndexes(entity.Record)
+	}
+}
+
+func (tbl *Table) RecordAddToIndexes(record *DataRecord) {
+	for _, indexDefinition := range tbl.Indexes {
+		indexDefinition.indexer(indexDefinition.index, record)
 	}
 }
