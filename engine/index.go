@@ -3,6 +3,7 @@ package engine
 import (
 	"fmt"
 	"github.com/tidwall/btree"
+	"unsafe"
 )
 
 type FlatIndex struct {
@@ -23,7 +24,7 @@ type MultiIndex struct {
 }
 
 type MultiItem struct {
-	Keys     *FlatIndex
+	Keys     []int
 	IdxValue int
 }
 
@@ -42,16 +43,26 @@ func (idx *MultiIndex) Add(indexValue int, key uint64) {
 
 	if item == nil {
 		item := &MultiItem{
-			Keys:     &FlatIndex{Tree: btree.New(byFlatVal)},
+			Keys:     make([]int, 0),
 			IdxValue: indexValue,
 		}
-		item.Keys.Tree.Set(&FlatItem{Value: key})
+		item.Keys = append(item.Keys, int(key))
 		idx.Tree.Set(item)
 	} else {
 		it := item.(*MultiItem)
-		flatItem := &FlatItem{Value: key}
-		it.Keys.Tree.Set(flatItem)
+		it.Keys = append(it.Keys, int(key))
 	}
+}
+
+func (idx *MultiIndex) GetSize() uint64 {
+	var size uint64 = 0
+	idx.Tree.Walk(func(items []interface{}) {
+		for _, item := range items {
+			it := item.(*MultiItem)
+			size += uint64(unsafe.Sizeof(it))
+		}
+	})
+	return size
 }
 
 func (idx *MultiIndex) GetTree() *btree.BTree {
@@ -65,24 +76,24 @@ func (idx *MultiIndex) Print() {
 
 	idx.Tree.Ascend(point, func(item interface{}) bool {
 		it := item.(*MultiItem)
-		fmt.Println("Value: ", it.IdxValue)
-		it.Keys.Tree.Ascend(nil, func(item2 interface{}) bool {
-			fmt.Print(item2.(*FlatItem).Value, " ")
-			return true
-		})
+		fmt.Printf("Value: %d %v+\n", it.IdxValue, it.Keys)
 		return true
 	})
 }
 
 func (idx *MultiIndex) Get(key int) *MultiItem {
 	StatsObj.Hits += 1
-	return idx.Tree.Get(&MultiItem{
+	item := idx.Tree.Get(&MultiItem{
 		IdxValue: key,
-	}).(*MultiItem)
+	})
+	if item == nil {
+		return nil
+	}
+	return item.(*MultiItem)
 }
 
 type IndexType interface {
-	Add()
+	GetSize() uint64
 }
 
 type BTIndex struct {
@@ -105,6 +116,15 @@ type FloatItem struct {
 func byFloatVal(a, b interface{}) bool {
 	i1, i2 := a.(*FloatItem), b.(*FloatItem)
 	return i1.IdxValue < i2.IdxValue
+}
+
+func (idx *FloatIndex) GetSize() uint64 {
+	idxItemSize := uint64(unsafe.Sizeof(FloatItem{
+		IdxValue: 1,
+		Key:      1,
+	}))
+
+	return idxItemSize * uint64(idx.Tree.Len())
 }
 
 func (idx *FloatIndex) Add(value float64, key uint64) {

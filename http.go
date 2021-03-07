@@ -44,6 +44,8 @@ func fastHTTPHandler(ctx *fasthttp.RequestCtx) {
 		sortHandler(ctx)
 	case "/count":
 		countHandler(ctx)
+	case "/stats":
+		statsHandler(ctx)
 	default:
 		ctx.Error("Unsupported path", fasthttp.StatusNotFound)
 	}
@@ -71,18 +73,40 @@ func GetLimitOffsetFromURL(ctx *fasthttp.RequestCtx) (int, int) {
 }
 
 func PrintRecord(ctx *fasthttp.RequestCtx, rec *engine.DataRecord) {
-	fmt.Fprintf(ctx, "Entry: %+v\n", rec)
+	var cities []int32
+
+	for _, city := range rec.Cities {
+		cities = append(cities, city.Value)
+	}
+
+	fmt.Fprintf(ctx, "Entry: ID: %+v Cities: %+v Active: %v\n", rec.ID, cities, rec.Active)
 }
 
 func countHandler(ctx *fasthttp.RequestCtx) {
 	fmt.Fprintf(ctx, "Count items: %d\n", tbl.PrimaryIndex.Tree.Len())
 }
 
+func statsHandler(ctx *fasthttp.RequestCtx) {
+	for name, idx := range tbl.Indexes {
+		var index engine.IndexType = idx.Index.(engine.IndexType)
+		fmt.Fprintf(ctx, "Index %s size is %d bytes\n", name, index.GetSize())
+	}
+}
+
 func byCitiesHandler(ctx *fasthttp.RequestCtx) {
 	var limit, offset int
 	limit, offset = GetLimitOffsetFromURL(ctx)
 
-	var cities = []int{30000}
+	var cities = make([]int, 0)
+
+	city, err := ctx.QueryArgs().GetUint("city")
+
+	if err != nil {
+		ctx.Error("Undefined parameter 'city'.", fasthttp.StatusBadRequest)
+		return
+	}
+
+	cities = append(cities, city)
 
 	result := SelectByCity(cities, limit, offset)
 

@@ -14,6 +14,7 @@ var tbl = engine.InitTableSpace("default")
 
 func main() {
 	fmt.Println("Hello! Starting GoDoc!")
+	start := time.Now().UnixNano()
 
 	engine.OpenBook()
 	engine.PreloadBookPages()
@@ -28,16 +29,27 @@ func main() {
 		panic(err)
 	}
 
-	readBook(tbl)
+	var indexerCities = func(idx interface{}, record *engine.DataRecord) {
+		index := idx.(*engine.MultiIndex)
 
-	start := time.Now().UnixNano()
+		for _, city := range record.Cities {
+			index.Add(int(city.Value), record.ID)
+		}
+	}
+	err = tbl.AddIndexer("citiesIdx", engine.CreateMulti(), indexerCities)
+
+	if err != nil {
+		panic(err)
+	}
+
+	readBook(tbl)
 
 	for i := uint32(0); i < 100; i++ {
 		//writeBook(i)
 	}
 
 	timer := (time.Now().UnixNano() - start) / 1000
-	log.Printf("init time: %d mcs", timer)
+	log.Printf("init time for %d entities: %d mcs", tbl.PrimaryIndex.Tree.Len(), timer)
 
 	StartServer()
 	engine.Close()
@@ -73,13 +85,14 @@ func SelectByCity(cities []int, limit int, offset int) *table.TemporaryDataSet {
 
 	for _, city := range cities {
 		item := citiesIdx.Get(city)
-		item.Keys.Tree.Walk(func(itemsWalker []interface{}) {
-			for _, itm := range itemsWalker {
-				flatItem := itm.(*engine.FlatItem)
-				id := flatItem.Value
-				tempTable.Add(tbl.GetByPK(id))
-			}
-		})
+
+		if item == nil {
+			continue
+		}
+
+		for _, id := range item.Keys {
+			tempTable.Add(tbl.GetByPK(uint64(id)))
+		}
 	}
 
 	return tempTable
@@ -169,7 +182,7 @@ func writeBook(num uint32) {
 		}
 
 		for ci := 0; ci < 10; ci++ {
-			city := &engine.City{Value: int32(rand.Intn(100000-1000) + 1000)}
+			city := &engine.City{Value: int32(rand.Intn(1200-1000) + 1000)}
 			dataRecord.Cities = append(dataRecord.Cities, city)
 		}
 

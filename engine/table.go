@@ -8,7 +8,7 @@ type Table struct {
 }
 
 type IndexDefinition struct {
-	index   interface{}
+	Index   interface{}
 	indexer indexer
 }
 
@@ -33,7 +33,7 @@ func (tbl *Table) AddIndexer(name string, index interface{}, indexFn indexer) er
 	}
 
 	indexDef := IndexDefinition{
-		index:   index,
+		Index:   index,
 		indexer: indexFn,
 	}
 	tbl.Indexes[name] = indexDef
@@ -63,6 +63,6 @@ func (tbl *Table) ReadPageRecords(page *Page) {
 
 func (tbl *Table) RecordAddToIndexes(record *DataRecord) {
 	for _, indexDefinition := range tbl.Indexes {
-		indexDefinition.indexer(indexDefinition.index, record)
+		indexDefinition.indexer(indexDefinition.Index, record)
 	}
 }
