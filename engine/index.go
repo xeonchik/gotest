@@ -41,17 +41,20 @@ func (idx *MultiIndex) Add(indexValue int, key uint64) {
 		IdxValue: indexValue,
 	})
 
+	var it *MultiItem = nil
+
 	if item == nil {
 		item := &MultiItem{
 			Keys:     make([]int, 0),
 			IdxValue: indexValue,
 		}
-		item.Keys = append(item.Keys, int(key))
 		idx.Tree.Set(item)
+		it = item
 	} else {
-		it := item.(*MultiItem)
-		it.Keys = append(it.Keys, int(key))
+		it = item.(*MultiItem)
 	}
+
+	it.Keys = append(it.Keys, int(key))
 }
 
 func (idx *MultiIndex) GetSize() uint64 {

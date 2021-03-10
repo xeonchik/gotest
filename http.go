@@ -79,7 +79,7 @@ func PrintRecord(ctx *fasthttp.RequestCtx, rec *engine.DataRecord) {
 		cities = append(cities, city.Value)
 	}
 
-	fmt.Fprintf(ctx, "Entry: ID: %+v Cities: %+v Active: %v\n", rec.ID, cities, rec.Active)
+	fmt.Fprintf(ctx, "Entry: ID: %+v Cities: %+v Sort: %+v Active: %v\n", rec.ID, cities, rec.Sort, rec.Active)
 }
 
 func countHandler(ctx *fasthttp.RequestCtx) {
@@ -97,8 +97,6 @@ func byCitiesHandler(ctx *fasthttp.RequestCtx) {
 	var limit, offset int
 	limit, offset = GetLimitOffsetFromURL(ctx)
 
-	var cities = make([]int, 0)
-
 	city, err := ctx.QueryArgs().GetUint("city")
 
 	if err != nil {
@@ -106,12 +104,13 @@ func byCitiesHandler(ctx *fasthttp.RequestCtx) {
 		return
 	}
 
-	cities = append(cities, city)
-
-	result := SelectByCity(cities, limit, offset)
-
-	for _, element := range result.Records {
-		PrintRecord(ctx, element)
+	result := SelectByCity(city, limit, offset)
+	for {
+		pk := result.Read()
+		if pk == nil {
+			break
+		}
+		PrintRecord(ctx, pk.Record)
 	}
 }
 
@@ -142,8 +141,12 @@ func selectCondHandler(ctx *fasthttp.RequestCtx) {
 
 	timer := (time.Now().UnixNano() - start) / 1000
 
-	for i, element := range result.Records {
-		fmt.Fprintf(ctx, "Entry: %+v %v\n", element, i)
+	for {
+		pk := result.Read()
+		if pk == nil {
+			break
+		}
+		PrintRecord(ctx, pk.Record)
 	}
 
 	log.Printf("select time: %d mcs", timer)

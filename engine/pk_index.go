@@ -15,7 +15,7 @@ type PKItem struct {
 	PrimaryKey uint64
 }
 
-func byKey(a, b interface{}) bool {
+func ByKeyCmp(a, b interface{}) bool {
 	i1, i2 := a.(*PKItem), b.(*PKItem)
 	return i1.PrimaryKey < i2.PrimaryKey
 }
@@ -65,7 +65,7 @@ func (idx *PKIndex) Print() {
 
 func CreatePKIndex() *PKIndex {
 	idx := &PKIndex{
-		Tree: btree.New(byKey),
+		Tree: btree.New(ByKeyCmp),
 	}
 	return idx
 }

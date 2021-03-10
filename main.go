@@ -6,6 +6,9 @@ import (
 	"godoc/table"
 	"log"
 	"math/rand"
+	"net/http"
+	_ "net/http/pprof"
+	"sort"
 	"strconv"
 	"time"
 )
@@ -13,6 +16,13 @@ import (
 var tbl = engine.InitTableSpace("default")
 
 func main() {
+	go func() {
+		err := http.ListenAndServe("localhost:6060", nil)
+		if err == nil {
+			log.Println("Started debug at localhost:6060")
+		}
+	}()
+
 	fmt.Println("Hello! Starting GoDoc!")
 	start := time.Now().UnixNano()
 
@@ -29,6 +39,7 @@ func main() {
 		panic(err)
 	}
 
+	// index citiesIdx
 	var indexerCities = func(idx interface{}, record *engine.DataRecord) {
 		index := idx.(*engine.MultiIndex)
 
@@ -80,27 +91,50 @@ func Sort(limit int, offset int) []*engine.DataRecord {
 }
 
 // SelectByCity city IN (cities)
-func SelectByCity(cities []int, limit int, offset int) *table.TemporaryDataSet {
-	tempTable := table.CreateTempTable()
+func SelectByCity(city int, limit int, offset int) *table.TemporaryDataSet {
+	idx := tbl.Indexes["citiesIdx"].Index
+	index := idx.(*engine.MultiIndex)
 
-	for _, city := range cities {
-		item := citiesIdx.Get(city)
+	// item of multi
+	mItem := index.Get(city)
+	leng := len(mItem.Keys)
 
-		if item == nil {
-			continue
+	idxSort := tbl.Indexes["sortIdx"].Index
+	sortIndex := idxSort.(*engine.FloatIndex)
+
+	tempTable := table.CreateTempTable(0)
+
+	sortIndex.Tree.Ascend(nil, func(item interface{}) bool {
+		if limit == 0 {
+			return false
 		}
 
-		for _, id := range item.Keys {
-			tempTable.Add(tbl.GetByPK(uint64(id)))
+		it := item.(*engine.FloatItem)
+		key := int(it.Key)
+
+		i := sort.Search(leng, func(i int) bool {
+			return mItem.Keys[i] >= key
+		})
+
+		if i < leng && key == mItem.Keys[i] {
+			if offset > 0 {
+				offset--
+				return true
+			}
+
+			pk := tbl.PK(uint64(key))
+			tempTable.AddPK(pk)
+			limit--
 		}
-	}
+		return true
+	})
 
 	return tempTable
 }
 
 // SelectWithConditions / SelectWithConditions id > n, order by sort
 func SelectWithConditions(limit int, offset int) *table.TemporaryDataSet {
-	tempTable := table.CreateTempTable()
+	tempTable := table.CreateTempTable(ratingIdx.Tree.Len())
 	n := uint64(10000)
 
 	ratingIdx.Tree.Ascend(nil, func(item interface{}) bool {
@@ -114,7 +148,7 @@ func SelectWithConditions(limit int, offset int) *table.TemporaryDataSet {
 			return false
 		}
 
-		tempTable.Add(tbl.GetByPK(it.Key))
+		tempTable.AddPK(tbl.PK(it.Key))
 
 		limit--
 		return true

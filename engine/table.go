@@ -14,6 +14,7 @@ type IndexDefinition struct {
 
 type indexer func(index interface{}, rec *DataRecord)
 
+// list of tables
 var tableSpace = make(map[string]*Table)
 
 func InitTableSpace(name string) *Table {
@@ -44,6 +45,10 @@ func (tbl *Table) AddIndexer(name string, index interface{}, indexFn indexer) er
 func (tbl *Table) GetByPK(pk uint64) *DataRecord {
 	pkItem := tbl.PrimaryIndex.Get(pk)
 	return pkItem.Record
+}
+
+func (tbl *Table) PK(pk uint64) *PKItem {
+	return tbl.PrimaryIndex.Get(pk)
 }
 
 func (tbl *Table) ReadPageRecords(page *Page) {
