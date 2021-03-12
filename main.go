@@ -67,12 +67,14 @@ func main() {
 }
 
 var ratingIdx = engine.CreateFloatIndex()
-var citiesIdx = engine.CreateMulti()
 
 func Sort(limit int, offset int) []*engine.DataRecord {
 	result := make([]*engine.DataRecord, 0)
 
-	ratingIdx.Tree.Ascend(nil, func(item interface{}) bool {
+	idx := tbl.Indexes["sortIdx"]
+	index := idx.Index.(*engine.FloatIndex)
+
+	index.Tree.Ascend(nil, func(item interface{}) bool {
 		if offset > 0 {
 			offset--
 			return true // just continue walking
@@ -137,7 +139,10 @@ func SelectWithConditions(limit int, offset int) *table.TemporaryDataSet {
 	tempTable := table.CreateTempTable(ratingIdx.Tree.Len())
 	n := uint64(10000)
 
-	ratingIdx.Tree.Ascend(nil, func(item interface{}) bool {
+	idx := tbl.Indexes["sortIdx"]
+	index := idx.Index.(*engine.FloatIndex)
+
+	index.Tree.Ascend(nil, func(item interface{}) bool {
 		if limit == 0 {
 			return false
 		}
@@ -145,7 +150,7 @@ func SelectWithConditions(limit int, offset int) *table.TemporaryDataSet {
 		it := item.(*engine.FloatItem)
 
 		if it.Key <= n {
-			return false
+			return true
 		}
 
 		tempTable.AddPK(tbl.PK(it.Key))

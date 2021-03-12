@@ -104,7 +104,12 @@ func byCitiesHandler(ctx *fasthttp.RequestCtx) {
 		return
 	}
 
+	start := time.Now().UnixNano()
+
 	result := SelectByCity(city, limit, offset)
+
+	timer := (time.Now().UnixNano() - start) / 1000
+
 	for {
 		pk := result.Read()
 		if pk == nil {
@@ -112,6 +117,8 @@ func byCitiesHandler(ctx *fasthttp.RequestCtx) {
 		}
 		PrintRecord(ctx, pk.Record)
 	}
+
+	log.Printf("by cities time: %d mcs", timer)
 }
 
 func sortHandler(ctx *fasthttp.RequestCtx) {
