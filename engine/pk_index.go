@@ -5,6 +5,8 @@ import (
 	"github.com/tidwall/btree"
 )
 
+type TPrimary uint32
+
 type PKIndex struct {
 	Tree *btree.BTree
 }

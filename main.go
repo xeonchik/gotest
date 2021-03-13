@@ -8,7 +8,6 @@ import (
 	"math/rand"
 	"net/http"
 	_ "net/http/pprof"
-	"sort"
 	"strconv"
 	"time"
 )
@@ -99,7 +98,6 @@ func SelectByCity(city int, limit int, offset int) *table.TemporaryDataSet {
 
 	// item of multi
 	mItem := index.Get(city)
-	leng := len(mItem.Keys)
 
 	idxSort := tbl.Indexes["sortIdx"].Index
 	sortIndex := idxSort.(*engine.FloatIndex)
@@ -113,12 +111,9 @@ func SelectByCity(city int, limit int, offset int) *table.TemporaryDataSet {
 
 		it := item.(*engine.FloatItem)
 		key := int(it.Key)
+		found := mItem.Tree.Get(key)
 
-		i := sort.Search(leng, func(i int) bool {
-			return mItem.Keys[i] >= key
-		})
-
-		if i < leng && key == mItem.Keys[i] {
+		if found != nil {
 			if offset > 0 {
 				offset--
 				return true

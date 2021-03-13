@@ -15,8 +15,9 @@ type FlatItem struct {
 }
 
 func byFlatVal(a, b interface{}) bool {
-	i1, i2 := a.(*FlatItem), b.(*FlatItem)
-	return i1.Value < i2.Value
+	i1 := a.(int)
+	i2 := b.(int)
+	return i1 < i2
 }
 
 type MultiIndex struct {
@@ -25,6 +26,7 @@ type MultiIndex struct {
 
 type MultiItem struct {
 	Keys     []int
+	Tree     *btree.BTree
 	IdxValue int
 }
 
@@ -47,6 +49,7 @@ func (idx *MultiIndex) Add(indexValue int, key uint64) {
 		item := &MultiItem{
 			Keys:     make([]int, 0),
 			IdxValue: indexValue,
+			Tree:     btree.New(byFlatVal),
 		}
 		idx.Tree.Set(item)
 		it = item
@@ -55,6 +58,7 @@ func (idx *MultiIndex) Add(indexValue int, key uint64) {
 	}
 
 	it.Keys = append(it.Keys, int(key))
+	it.Tree.Set(int(key))
 }
 
 func (idx *MultiIndex) GetSize() uint64 {
